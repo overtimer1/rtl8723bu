@@ -14,7 +14,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/share/swift /usr/local/share/chromium /opt/hostedtoolcache
           sudo apt-get clean
 
-      # 2. 安装依赖、GCC14 交叉编译器、QEMU（终极版）
+      # 2. 安装依赖、GCC14 交叉编译器、QEMU
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -72,13 +72,11 @@ jobs:
           dpkg-deb -x /home/builder/build/output/debs/linux-headers-*.deb /tmp/headers_extract
           ls -d /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818
 
-      # 8. 🔥 终极补丁：全局暴力拔除 GCC14 选项，防止漏网之鱼
+      # 8. 全局暴力拔除 GCC14 选项
       - name: Global patch to remove GCC14 flag
         run: |
-          # 搜寻解压目录下所有的 Makefile 文件，见一个删一个
           find /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818/ -name "Makefile" -exec sed -i 's/-fmin-function-alignment=8//g' {} +
-          echo "Global patch applied. Checking remaining occurrences:"
-          grep -rn -- "-fmin-function-alignment=8" /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818/ || echo "Clean! No more bad flags found."
+          echo "Global patch applied."
 
       # 9. 检出 rtl8723bu 源码
       - name: Checkout rtl8723bu source
@@ -86,7 +84,7 @@ jobs:
         with:
           path: rtl8723bu
 
-      # 10. 交叉编译驱动（明确使用 GCC 14）
+      # 10. 🔥 终极绝杀：显式指定驱动自身的 include 路径
       - name: Cross-compile driver
         run: |
           cd rtl8723bu
@@ -95,6 +93,7 @@ jobs:
                CROSS_COMPILE=aarch64-linux-gnu- \
                CC=aarch64-linux-gnu-gcc-14 \
                KSRC=/tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818 \
+               EXTRA_CFLAGS="-I$(pwd)/include" \
                -j$(nproc)
 
       # 11. 上传编译好的驱动
