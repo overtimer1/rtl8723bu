@@ -14,7 +14,7 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/share/swift /usr/local/share/chromium /opt/hostedtoolcache
           sudo apt-get clean
 
-      # 2. 安装依赖、GCC14 交叉编译器、QEMU
+      # 2. 安装依赖
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -40,7 +40,7 @@ jobs:
           sudo systemctl restart docker || sudo service docker restart || true
           sleep 5
 
-      # 5. 克隆 Armbian 构建框架并锁定 commit
+      # 5. 克隆 Armbian 构建框架
       - name: Clone Armbian build framework
         run: |
           sudo -u builder -H bash -c '
@@ -50,7 +50,7 @@ jobs:
             git checkout 16d039191
           '
 
-      # 6. 编译 7.2.5 头文件
+      # 6. 编译 7.2.5 头文件（利用缓存）
       - name: Build kernel headers v7.2.5
         run: |
           sudo -u builder -H bash -c '
@@ -84,13 +84,18 @@ jobs:
         with:
           path: rtl8723bu
 
-      # 10. 修复 Makefile 路径
-      - name: Patch driver Makefile
+      # 10. 🔥 终极杀招：将驱动 Makefile 中的 include 路径硬编码为绝对路径
+      - name: Patch driver Makefile with absolute path
         run: |
           cd rtl8723bu
-          sed -i 's|-I$(src)/include|-I$(CURDIR)/include|g' Makefile
+          DRV_DIR=$(pwd)
+          # 移除可能存在的错误软链接，并用绝对路径替换 $(src) 和 $(CURDIR)
+          sed -i "s|-I\$(src)/include|-I${DRV_DIR}/include|g" Makefile
+          sed -i "s|-I\$(CURDIR)/include|-I${DRV_DIR}/include|g" Makefile
+          echo "Patched Makefile:"
+          grep "ccflags-y" Makefile | head -5
 
-      # 11. 🔥 终极杀招：修补 Linux 7.2 API 冲突
+      # 11. 修复 Linux 7.2 API 冲突
       - name: Patch driver API for Linux 7.2
         run: |
           cd rtl8723bu
@@ -100,7 +105,7 @@ jobs:
           find . -type f \( -name "*.c" -o -name "*.h" \) -exec sed -i 's/\bsha256_init\b/rtw_sha256_init/g' {} +
           echo "API compatibility patches applied."
 
-      # 12. 交叉编译驱动（带 API 修复）
+      # 12. 交叉编译驱动
       - name: Cross-compile driver
         run: |
           cd rtl8723bu
