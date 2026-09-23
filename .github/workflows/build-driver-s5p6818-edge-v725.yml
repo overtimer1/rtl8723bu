@@ -72,13 +72,19 @@ jobs:
           dpkg-deb -x /home/builder/build/output/debs/linux-headers-*.deb /tmp/headers_extract
           ls -d /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818
 
+      # 🔥 新增：给头文件打补丁，删除 GCC13 不认识的选项
+      - name: Patch headers to remove GCC14 flag
+        run: |
+          sed -i 's/-fmin-function-alignment=8//g' /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818/scripts/Makefile.build
+          echo "Patch applied successfully."
+
       # 8. 检出 rtl8723bu 源码
       - name: Checkout rtl8723bu source
         uses: actions/checkout@v4
         with:
           path: rtl8723bu
 
-      # 9. 交叉编译驱动（🔥 删掉 KERNELRELEASE，只保留 KSRC）
+      # 9. 交叉编译驱动
       - name: Cross-compile driver
         run: |
           cd rtl8723bu
