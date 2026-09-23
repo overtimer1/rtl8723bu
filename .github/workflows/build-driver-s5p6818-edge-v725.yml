@@ -14,13 +14,13 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/share/swift /usr/local/share/chromium /opt/hostedtoolcache
           sudo apt-get clean
 
-      # 2. 安装依赖、交叉编译器、QEMU
+      # 2. 安装依赖、GCC14 交叉编译器、QEMU（终极版）
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y git bc bison flex libssl-dev make libncurses-dev \
             python3 python3-pip device-tree-compiler rsync kmod cpio sudo \
-            qemu-user-static binfmt-support crossbuild-essential-arm64 dwarves
+            qemu-user-static binfmt-support gcc-14-aarch64-linux-gnu g++-14-aarch64-linux-gnu dwarves
 
       # 3. 启用 QEMU 模拟
       - name: Enable QEMU binfmt
@@ -72,28 +72,32 @@ jobs:
           dpkg-deb -x /home/builder/build/output/debs/linux-headers-*.deb /tmp/headers_extract
           ls -d /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818
 
-      # 🔥 新增：给头文件打补丁，删除 GCC13 不认识的选项
-      - name: Patch headers to remove GCC14 flag
+      # 8. 🔥 终极补丁：全局暴力拔除 GCC14 选项，防止漏网之鱼
+      - name: Global patch to remove GCC14 flag
         run: |
-          sed -i 's/-fmin-function-alignment=8//g' /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818/scripts/Makefile.build
-          echo "Patch applied successfully."
+          # 搜寻解压目录下所有的 Makefile 文件，见一个删一个
+          find /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818/ -name "Makefile" -exec sed -i 's/-fmin-function-alignment=8//g' {} +
+          echo "Global patch applied. Checking remaining occurrences:"
+          grep -rn -- "-fmin-function-alignment=8" /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818/ || echo "Clean! No more bad flags found."
 
-      # 8. 检出 rtl8723bu 源码
+      # 9. 检出 rtl8723bu 源码
       - name: Checkout rtl8723bu source
         uses: actions/checkout@v4
         with:
           path: rtl8723bu
 
-      # 9. 交叉编译驱动
+      # 10. 交叉编译驱动（明确使用 GCC 14）
       - name: Cross-compile driver
         run: |
           cd rtl8723bu
           make clean
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
+          make ARCH=arm64 \
+               CROSS_COMPILE=aarch64-linux-gnu- \
+               CC=aarch64-linux-gnu-gcc-14 \
                KSRC=/tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818 \
                -j$(nproc)
 
-      # 10. 上传编译好的驱动
+      # 11. 上传编译好的驱动
       - name: Upload driver artifact
         uses: actions/upload-artifact@v4
         with:
