@@ -20,7 +20,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git bc bison flex libssl-dev make libncurses-dev \
             python3 python3-pip device-tree-compiler rsync kmod cpio sudo \
-            qemu-user-static binfmt-support crossbuild-essential-arm64
+            qemu-user-static binfmt-support crossbuild-essential-arm64 dwarves
 
       # 3. 启用 QEMU 模拟
       - name: Enable QEMU binfmt
@@ -50,7 +50,7 @@ jobs:
             git checkout 16d039191
           '
 
-      # 6. 编译 7.2.5 头文件（利用缓存，预计 4 分钟）
+      # 6. 编译 7.2.5 头文件（利用缓存）
       - name: Build kernel headers v7.2.5
         run: |
           sudo -u builder -H bash -c '
@@ -65,35 +65,32 @@ jobs:
               KERNELBRANCH=tag:v7.2.5
           '
 
-      # 7. 直接安装刚生成的 .deb 头文件（不用去上传下载）
-      - name: Install freshly built headers
+      # 7. 解压头文件到临时目录（🔥 避开 dpkg 依赖检查的终极杀招）
+      - name: Extract freshly built headers
         run: |
-          sudo dpkg -i --force-architecture /home/builder/build/output/debs/linux-headers-*.deb || sudo apt-get install -f -y
-          ls -d /usr/src/linux-headers-7.2.5-edge-s5p6818
+          mkdir -p /tmp/headers_extract
+          # 直接解压 deb 包内容，不安装，不检查依赖
+          dpkg-deb -x /home/builder/build/output/debs/linux-headers-*.deb /tmp/headers_extract
+          # 验证解压出的头文件目录是否存在
+          ls -d /tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818
 
-      # 8. 映射内核路径
-      - name: Map kernel headers path
-        run: |
-          sudo mkdir -p /lib/modules/7.2.5-edge-s5p6818
-          sudo ln -sf /usr/src/linux-headers-7.2.5-edge-s5p6818 /lib/modules/7.2.5-edge-s5p6818/build
-
-      # 9. 直接检出你 Fork 的 rtl8723bu 源码
+      # 8. 直接检出你 Fork 的 rtl8723bu 源码
       - name: Checkout rtl8723bu source
         uses: actions/checkout@v4
         with:
           path: rtl8723bu
 
-      # 10. 交叉编译驱动
+      # 9. 交叉编译驱动（将 KSRC 指向解压出来的目录）
       - name: Cross-compile driver
         run: |
           cd rtl8723bu
           make clean
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- \
-               KSRC=/usr/src/linux-headers-7.2.5-edge-s5p6818 \
+               KSRC=/tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818 \
                KERNELRELEASE=7.2.5-edge-s5p6818 \
                -j$(nproc)
 
-      # 11. 验证并上传编译好的驱动文件
+      # 10. 验证并上传编译好的驱动文件
       - name: Upload driver artifact
         uses: actions/upload-artifact@v4
         with:
