@@ -84,7 +84,16 @@ jobs:
         with:
           path: rtl8723bu
 
-      # 10. 🔥 终极绝杀：显式指定驱动自身的 include 路径
+      # 10. 🔥 终极绝杀：修改驱动 Makefile，强行修正头文件路径
+      - name: Patch driver Makefile
+        run: |
+          cd rtl8723bu
+          # 把错误的 $(src) 替换成绝对路径 $(CURDIR)，确保编译器能找到驱动自己的 include 目录
+          sed -i 's|-I$(src)/include|-I$(CURDIR)/include|g' Makefile
+          echo "Patched Makefile:"
+          grep -n "ccflags-y" Makefile | head -5
+
+      # 11. 交叉编译驱动（同时使用 KCFLAGS 双重保险）
       - name: Cross-compile driver
         run: |
           cd rtl8723bu
@@ -93,10 +102,10 @@ jobs:
                CROSS_COMPILE=aarch64-linux-gnu- \
                CC=aarch64-linux-gnu-gcc-14 \
                KSRC=/tmp/headers_extract/usr/src/linux-headers-7.2.5-edge-s5p6818 \
-               EXTRA_CFLAGS="-I$(pwd)/include" \
+               KCFLAGS="-I$(pwd)/include" \
                -j$(nproc)
 
-      # 11. 上传编译好的驱动
+      # 12. 上传编译好的驱动
       - name: Upload driver artifact
         uses: actions/upload-artifact@v4
         with:
