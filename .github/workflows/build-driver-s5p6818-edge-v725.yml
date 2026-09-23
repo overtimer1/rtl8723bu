@@ -84,16 +84,19 @@ jobs:
         with:
           path: rtl8723bu
 
-      # 10. 🔥 终极杀招：将驱动 Makefile 中的 include 路径硬编码为绝对路径
-      - name: Patch driver Makefile with absolute path
+      # 10. 🔥 核心修复：在每个子目录创建指向 include 的符号链接
+      - name: Create include symlinks in all subdirectories
         run: |
           cd rtl8723bu
-          DRV_DIR=$(pwd)
-          # 移除可能存在的错误软链接，并用绝对路径替换 $(src) 和 $(CURDIR)
-          sed -i "s|-I\$(src)/include|-I${DRV_DIR}/include|g" Makefile
-          sed -i "s|-I\$(CURDIR)/include|-I${DRV_DIR}/include|g" Makefile
-          echo "Patched Makefile:"
-          grep "ccflags-y" Makefile | head -5
+          # 为所有包含 .c 文件的子目录创建 include 软链接
+          for dir in core hal os_dep platform; do
+            if [ -d "$dir" ] && [ ! -e "$dir/include" ]; then
+              ln -s ../include "$dir/include"
+              echo "Created symlink: $dir/include -> ../include"
+            fi
+          done
+          # 验证核心文件是否存在
+          ls -l include/drv_types.h
 
       # 11. 修复 Linux 7.2 API 冲突
       - name: Patch driver API for Linux 7.2
